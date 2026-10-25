@@ -1,0 +1,56 @@
+name: Terraform Drift Detection Demo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "30 7 * * 1-5"
+
+permissions:
+  contents: read
+
+jobs:
+  drift-demo:
+    name: Simulate and Detect Drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.6"
+
+      - name: Initialize Terraform
+        run: terraform init -input=false
+
+      - name: Validate configuration
+        run: terraform validate
+
+      - name: Create the local demo file
+        run: terraform apply -auto-approve -input=false
+
+      - name: Simulate an external change
+        run: echo "Changed outside Terraform" > demo.txt
+
+      - name: Detect drift
+        shell: bash
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -input=false -no-color
+          status=$?
+          set -e
+
+          if [ "$status" -eq 2 ]; then
+            echo "Drift detected: Terraform proposes changes."
+          elif [ "$status" -eq 0 ]; then
+            echo "No changes detected."
+          else
+            echo "Terraform plan failed with exit code $status."
+            exit "$status"
+          fi
